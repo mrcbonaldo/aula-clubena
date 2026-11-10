@@ -1,0 +1,50 @@
+# Sobe MySQL + API + client com: docker compose up --build
+# Os valores vêm do arquivo .env da raiz (copie de .env.example)
+services:
+  db:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:?defina DB_ROOT_PASS no .env}
+      MYSQL_DATABASE: crm_leads
+      MYSQL_USER: ${DB_USER:-crm_app}
+      MYSQL_PASSWORD: ${DB_PASS:?defina DB_PASS no .env}
+    ports:
+      - "3307:3306"
+    volumes:
+      # Todo .sql nesta pasta roda na primeira criação do banco
+      - ./server/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - dados-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 5s
+      retries: 20
+
+  api:
+    build: ./server
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER:-crm_app}
+      DB_PASS: ${DB_PASS}
+      DB_NAME: crm_leads
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./server/src:/app/src # edição de código reflete sem rebuild
+    depends_on:
+      db:
+        condition: service_healthy
+
+  client:
+    build: ./client
+    environment:
+      API_URL: http://api:3001 # o proxy do Vite aponta para o serviço api
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client/src:/app/src
+    depends_on:
+      - api
+
+volumes:
+  dados-mysql:
